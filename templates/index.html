@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payroll &amp; Leave Management System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+    <h1>Employee Payroll &amp; Leave Management System</h1>
+</header>
+
+<div class="container">
+
+    {# -------- Flash messages -------- #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-wrap">
+                {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    {# -------- Summary cards -------- #}
+    <section class="cards">
+        <div class="card">
+            <span class="card-number">{{ total_employees }}</span>
+            <span class="card-label">Active Employees</span>
+        </div>
+        <div class="card">
+            <span class="card-number">{{ pending_leaves }}</span>
+            <span class="card-label">Pending Leave Requests</span>
+        </div>
+        <div class="card">
+            <span class="card-number">{{ payrolls|length }}</span>
+            <span class="card-label">Recent Payrolls</span>
+        </div>
+    </section>
+
+    {# -------- Tab navigation -------- #}
+    <nav class="tabs">
+        <button class="tab-btn active" data-tab="employees">Employees</button>
+        <button class="tab-btn" data-tab="leave">Leave</button>
+        <button class="tab-btn" data-tab="payroll">Payroll</button>
+    </nav>
+
+    {# ============================================================ #}
+    {# TAB 1: Employees                                              #}
+    {# ============================================================ #}
+    <section id="employees" class="tab-panel active">
+
+        <div class="panel-grid">
+            <div class="form-box">
+                <h2>Add Employee</h2>
+                <form action="{{ url_for('add_employee') }}" method="post">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name" required>
+
+                    <label for="department">Department</label>
+                    <input type="text" id="department" name="department" required>
+
+                    <label for="base_salary">Base Salary (monthly)</label>
+                    <input type="number" step="0.01" id="base_salary" name="base_salary" required>
+
+                    <label for="joined_date">Joined Date</label>
+                    <input type="date" id="joined_date" name="joined_date" value="{{ today }}" required>
+
+                    <button type="submit">Add Employee</button>
+                </form>
+            </div>
+
+            <div class="table-box">
+                <h2>Employees</h2>
+                <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Base Salary</th>
+                            <th>Joined</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emp in employees %}
+                        <tr>
+                            <td>{{ emp.id | emp_id }}</td>
+                            <td>{{ emp.name }}</td>
+                            <td>{{ emp.department }}</td>
+                            <td>{{ "%.2f"|format(emp.base_salary) }}</td>
+                            <td>{{ emp.joined_date }}</td>
+                            <td>
+                                <button class="btn-edit"
+                                    data-id="{{ emp.id }}"
+                                    data-name="{{ emp.name }}"
+                                    data-department="{{ emp.department }}"
+                                    data-salary="{{ emp.base_salary }}"
+                                    data-joined="{{ emp.joined_date }}"
+                                    onclick="openEditModal(this)">
+                                    ✏️ Edit
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="empty-row">No employees yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ============================================================ #}
+    {# TAB 2: Leave                                                  #}
+    {# ============================================================ #}
+    <section id="leave" class="tab-panel">
+
+        <div class="panel-grid">
+            <div class="form-box">
+                <h2>Request Leave</h2>
+                <form action="{{ url_for('request_leave') }}" method="post">
+                    <label for="leave_emp_id">Employee</label>
+                    <select id="leave_emp_id" name="emp_id" required>
+                        <option value="" disabled selected>Select employee</option>
+                        {% for emp in employees %}
+                        <option value="{{ emp.id }}">{{ emp.name }} (#{{ emp.id | emp_id }})</option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="leave_type">Leave Type</label>
+                    <select id="leave_type" name="leave_type" required>
+                        <option value="Sick">Sick</option>
+                        <option value="Casual">Casual</option>
+                        <option value="Unpaid">Unpaid</option>
+                    </select>
+
+                    <label for="start_date">Start Date</label>
+                    <input type="date" id="start_date" name="start_date" required>
+
+                    <label for="end_date">End Date</label>
+                    <input type="date" id="end_date" name="end_date" required>
+
+                    <button type="submit">Submit Request</button>
+                </form>
+            </div>
+
+            <div class="table-box">
+                <h2>Leave Requests</h2>
+                <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Employee</th>
+                            <th>Type</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Days</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lr in leave_requests %}
+                        <tr>
+                            <td>{{ lr.id }}</td>
+                            <td>{{ lr.emp_name }}</td>
+                            <td>{{ lr.leave_type }}</td>
+                            <td>{{ lr.start_date }}</td>
+                            <td>{{ lr.end_date }}</td>
+                            <td>{{ lr.days }}</td>
+                            <td>
+                                <span class="badge badge-{{ lr.status|lower }}">{{ lr.status }}</span>
+                            </td>
+                            <td>
+                                {% if lr.status == "Pending" %}
+                                <form class="inline-form" action="{{ url_for('process_leave', leave_id=lr.id) }}" method="post">
+                                    <button type="submit" name="action" value="approve" class="btn-approve">Approve</button>
+                                    <button type="submit" name="action" value="reject" class="btn-reject">Reject</button>
+                                </form>
+                                {% else %}
+                                &mdash;
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="empty-row">No leave requests yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ============================================================ #}
+    {# TAB 3: Payroll                                                #}
+    {# ============================================================ #}
+    <section id="payroll" class="tab-panel">
+
+        <div class="panel-grid">
+            <div class="form-box">
+                <h2>Generate Payroll</h2>
+                <form action="{{ url_for('generate_payroll') }}" method="post">
+                    <label for="payroll_emp_id">Employee</label>
+                    <select id="payroll_emp_id" name="emp_id" required>
+                        <option value="" disabled selected>Select employee</option>
+                        {% for emp in employees %}
+                        <option value="{{ emp.id }}">{{ emp.name }} (#{{ emp.id | emp_id }})</option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="month_year">Month</label>
+                    <input type="month" id="month_year" name="month_year" required>
+
+                    <button type="submit">Generate Payslip</button>
+                </form>
+                <p class="hint">
+                    Formula: daily rate = base salary &divide; 30. Approved <strong>Unpaid</strong>
+                    leave days in the selected month are deducted from the base salary.
+                </p>
+            </div>
+
+            <div class="table-box">
+                <h2>Recent Payslips</h2>
+                <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Employee</th>
+                            <th>Month</th>
+                            <th>Basic Pay</th>
+                            <th>Unpaid Days</th>
+                            <th>Deduction</th>
+                            <th>Net Salary</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in payrolls %}
+                        <tr>
+                            <td>{{ p.id }}</td>
+                            <td>{{ p.emp_name }}</td>
+                            <td>{{ p.month_year }}</td>
+                            <td>{{ "%.2f"|format(p.basic_pay) }}</td>
+                            <td>{{ p.unpaid_days }}</td>
+                            <td>{{ "%.2f"|format(p.leave_deduction) }}</td>
+                            <td><strong>{{ "%.2f"|format(p.net_salary) }}</strong></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="empty-row">No payroll records yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+{# -------- Edit Employee Modal -------- #}
+<div id="editModal" class="modal-backdrop" onclick="closeEditModal(event)">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Edit Employee <span id="modalEmpId"></span></h3>
+            <button class="modal-close" onclick="document.getElementById('editModal').classList.remove('open')">&times;</button>
+        </div>
+        <form id="editForm" method="post">
+            <label for="edit_name">Name</label>
+            <input type="text" id="edit_name" name="name" required>
+
+            <label for="edit_department">Department</label>
+            <input type="text" id="edit_department" name="department" required>
+
+            <label for="edit_salary">Base Salary (monthly)</label>
+            <input type="number" step="0.01" id="edit_salary" name="base_salary" required>
+
+            <label for="edit_joined">Joined Date</label>
+            <input type="date" id="edit_joined" name="joined_date" required>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="document.getElementById('editModal').classList.remove('open')">Cancel</button>
+                <button type="submit" class="btn-save">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // ---- Tab switching ----
+    const tabButtons = document.querySelectorAll(".tab-btn");
+    const tabPanels  = document.querySelectorAll(".tab-panel");
+
+    tabButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            tabButtons.forEach((b) => b.classList.remove("active"));
+            tabPanels.forEach((p)  => p.classList.remove("active"));
+            btn.classList.add("active");
+            document.getElementById(btn.dataset.tab).classList.add("active");
+        });
+    });
+
+    // ---- Edit modal ----
+    function openEditModal(btn) {
+        const id   = btn.dataset.id;
+        document.getElementById("modalEmpId").textContent  = "#" + String(id).padStart(3, "0");
+        document.getElementById("edit_name").value         = btn.dataset.name;
+        document.getElementById("edit_department").value   = btn.dataset.department;
+        document.getElementById("edit_salary").value       = btn.dataset.salary;
+        document.getElementById("edit_joined").value       = btn.dataset.joined;
+        document.getElementById("editForm").action         = "/edit-employee/" + id;
+        document.getElementById("editModal").classList.add("open");
+    }
+
+    function closeEditModal(event) {
+        // close only when clicking the dark backdrop, not the box itself
+        if (event.target === document.getElementById("editModal")) {
+            document.getElementById("editModal").classList.remove("open");
+        }
+    }
+</script>
+
+</body>
+</html>
